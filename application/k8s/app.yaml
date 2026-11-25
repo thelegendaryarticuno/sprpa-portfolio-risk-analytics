@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: sprpa }
+---
+# Secrets `db` and `firebase-sa` are created by deploy.ps1 (never committed).
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: sprpa }
+spec:
+  clusterIP: None
+  selector: { app: postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: postgres, namespace: sprpa }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports: [{ containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_USER, value: sprpa }
+            - { name: POSTGRES_DB, value: sprpa }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: db, key: password } }
+          readinessProbe: { exec: { command: ["pg_isready", "-U", "sprpa"] }, periodSeconds: 5 }
+          resources: { requests: { cpu: 100m, memory: 192Mi }, limits: { memory: 512Mi } }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: sprpa-config, namespace: sprpa }
+data:
+  MARKET_MODE: auto
+  GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase.json
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: backend, namespace: sprpa }
+spec:
+  replicas: 2
+  strategy: { rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app: backend } }
+  template:
+    metadata: { labels: { app: backend } }
+    spec:
+      containers:
+        - name: backend
+          image: sprpa-backend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 4000 }]
+          envFrom: [{ configMapRef: { name: sprpa-config } }]
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: db, key: url } }
+          volumeMounts: [{ name: firebase, mountPath: /secrets, readOnly: true }]
+          readinessProbe: { httpGet: { path: /api/ready, port: 4000 }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /api/health, port: 4000 }, initialDelaySeconds: 10, periodSeconds: 10 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 500m, memory: 384Mi } }
+      volumes:
+        - name: firebase
+          secret: { secretName: firebase-sa }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: backend, namespace: sprpa }
+spec:
+  selector: { app: backend }
+  ports: [{ port: 4000, targetPort: 4000 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: backend, namespace: sprpa }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: backend }
+  minReplicas: 2
+  maxReplicas: 5
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } } }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: frontend, namespace: sprpa }
+spec:
+  replicas: 2
+  strategy: { rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app: frontend } }
+  template:
+    metadata: { labels: { app: frontend } }
+    spec:
+      containers:
+        - name: frontend
+          image: sprpa-frontend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 80 }]
+          readinessProbe: { httpGet: { path: /, port: 80 }, periodSeconds: 5 }
+          resources: { requests: { cpu: 25m, memory: 32Mi }, limits: { memory: 128Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: frontend, namespace: sprpa }
+spec:
+  type: NodePort
+  selector: { app: frontend }
+  ports: [{ port: 80, targetPort: 80, nodePort: 30080 }]

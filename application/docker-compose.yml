@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sprpa
+      POSTGRES_PASSWORD: sprpa
+      POSTGRES_DB: sprpa
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sprpa"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    image: sprpa-backend:1.0.0
+    environment:
+      DATABASE_URL: postgres://sprpa:sprpa@postgres:5432/sprpa
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase.json
+      MARKET_MODE: ${MARKET_MODE:-auto} # set to "synthetic" to force labelled demo data
+    volumes:
+      - ${FIREBASE_SA_FILE:?set it in .env}:/secrets/firebase.json:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:?set it in .env}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:?set it in .env}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:?set it in .env}
+        VITE_FIREBASE_STORAGE_BUCKET: ${VITE_FIREBASE_STORAGE_BUCKET:?set it in .env}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID:?set it in .env}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:?set it in .env}
+    image: sprpa-frontend:1.0.0
+    ports: ["8080:80"]
+    depends_on: [backend]
+    restart: unless-stopped
+
+volumes:
+  pgdata:

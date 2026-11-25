@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 248 250 252; --surface: 255 255 255; --raised: 241 245 249; --line: 226 232 240;
+  --fg: 15 23 42; --muted: 100 116 139;
+  --brand: 13 148 136; --brand2: 99 102 241; --up: 22 163 74; --down: 225 29 72; --warn: 217 119 6;
+}
+.dark {
+  --bg: 7 10 18; --surface: 14 19 31; --raised: 22 29 46; --line: 34 44 66;
+  --fg: 232 237 247; --muted: 133 147 173;
+  --brand: 45 212 191; --brand2: 129 140 248; --up: 52 211 153; --down: 251 113 133; --warn: 251 191 36;
+}
+
+html { scroll-behavior: smooth; }
+body { background: rgb(var(--bg)); }
+::selection { background: rgb(var(--brand) / .3); }
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface/80 backdrop-blur-sm; }
+  .input { @apply w-full rounded-xl border border-line bg-raised/60 px-3.5 py-2.5 text-sm text-fg outline-none transition placeholder:text-muted/70 focus:border-brand focus:ring-2 focus:ring-brand/25; }
+  .label { @apply mb-1.5 block text-xs font-medium text-muted; }
+  .th { @apply px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-muted; }
+  .td { @apply px-4 py-3 text-sm; }
+}
+
+.dot-grid {
+  background-image: radial-gradient(rgb(var(--fg) / .09) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+.recharts-text { fill: rgb(var(--muted)); font-size: 11px; }
+.recharts-cartesian-grid line { stroke: rgb(var(--line)); }

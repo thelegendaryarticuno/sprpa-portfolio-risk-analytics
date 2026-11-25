@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+!.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+application/firebase.js
+.claude/
+~$*
